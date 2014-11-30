@@ -1,6 +1,14 @@
 import numpy as np
 from functools import reduce, partial
+from sklearn.decomposition import PCA
+from sklearn.neighbors.ball_tree import BallTree
 
+
+def nonlocalmeans(img, algorithm="clustered", **kwargs):
+    if algorithm == "naive":
+        return _nonlocalmeans_naive(img, **kwargs)
+    if algorithm == "clustered":
+        return _nonlocalmeans_clustered(img, **kwargs)
 
 
 def _distance(values, pixel_window, h2, Nw):
@@ -17,7 +25,7 @@ def _distance(values, pixel_window, h2, Nw):
     return w * patch_window[nr / 2, nc / 2], w
 
 
-def nonlocalmeans(img, n_big=20, n_small=5, h=10):
+def _nonlocalmeans_naive(img, n_big=20, n_small=5, h=10):
     new_n = np.zeros_like(img)
 
     Nw = (2 * n_small + 1) ** 2
@@ -51,3 +59,41 @@ def nonlocalmeans(img, n_big=20, n_small=5, h=10):
             new_n[r - padding, c - padding] = total_c / total_w
 
     return new_n
+
+
+def _nonlocalmeans_clustered(img, n_small=5, n_components=9, h=10):
+    n_small = 6
+    h = 10
+
+    Nw = (2 * n_small + 1) ** 2
+    h2 = h * h
+    n_rows, n_cols = img.shape
+
+    # precompute the coordinate difference for the big patch
+    n_similar = 10
+    small_rows, small_cols = np.indices(((2 * n_small + 1), (2 * n_small + 1))) - n_small
+
+    # put all patches so we can cluster them
+    n_padded = np.pad(img, n_small, mode='reflect')
+    patches = np.zeros((n_rows * n_cols, Nw))
+
+    n = 0
+    for r in range(n_small, n_small + n_rows):
+        for c in range(n_small, n_small + n_cols):
+            window = n_padded[r + small_rows, c + small_cols].flatten()
+            patches[n, :] = window
+            n += 1
+
+    transformed = PCA(n_components=9).fit_transform(patches)
+    # index the patches into a tree
+    tree = BallTree(transformed, leaf_size=2)
+
+    new_img = np.zeros_like(img)
+    for r in range(n_rows):
+        for c in range(n_cols):
+            idx = r * n_cols + c
+            dist, ind = tree.query(transformed[idx], k=30)
+            ridx = np.array([(int(i / n_cols), int(i % n_cols)) for i in ind[0, 1:]])
+            colors = img[ridx[:, 0], ridx[:, 1]]
+            w = np.exp(-dist[0, 1:] / h2)
+            new_img[r, c] = np.sum(w * colors) / np.sum(w)

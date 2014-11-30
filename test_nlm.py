@@ -4,7 +4,7 @@ import skimage.io as io
 import skimage.color as color
 from skimage import data_dir
 
-from nlm import nonlocalmeans
+from nlm import _nonlocalmeans_naive
 
 noise_var = np.logspace(-4, -1, 5)
 
@@ -22,7 +22,7 @@ for sigma2 in noise_var:
 lena = color.rgb2lab(lena)
 n = noisy[3][:, :, 0]
 
-denoised = nonlocalmeans(n, n_big=7, n_small=1)
+denoised = _nonlocalmeans_naive(n, n_big=7, n_small=1)
 
 plt.subplot(1, 3, 1)
 plt.imshow(lena[:, :, 1], cmap='gray')
