@@ -57,20 +57,18 @@ def _nonlocalmeans_naive(img, n_big=20, n_small=5, h=10):
 
             total_c, total_w = reduce(lambda a, b: (a[0] + b[0], a[1] + b[1]), distances)
             new_n[r - padding, c - padding] = total_c / total_w
+        print(r)
 
     return new_n
 
 
-def _nonlocalmeans_clustered(img, n_small=5, n_components=9, h=10):
-    n_small = 6
-    h = 10
+def _nonlocalmeans_clustered(img, n_small=5, n_components=9, n_neighbors=30, h=10):
 
     Nw = (2 * n_small + 1) ** 2
     h2 = h * h
     n_rows, n_cols = img.shape
 
     # precompute the coordinate difference for the big patch
-    n_similar = 10
     small_rows, small_cols = np.indices(((2 * n_small + 1), (2 * n_small + 1))) - n_small
 
     # put all patches so we can cluster them
@@ -84,16 +82,19 @@ def _nonlocalmeans_clustered(img, n_small=5, n_components=9, h=10):
             patches[n, :] = window
             n += 1
 
-    transformed = PCA(n_components=9).fit_transform(patches)
+    transformed = PCA(n_components=n_components).fit_transform(patches)
     # index the patches into a tree
     tree = BallTree(transformed, leaf_size=2)
 
+    print("Denoising")
     new_img = np.zeros_like(img)
     for r in range(n_rows):
         for c in range(n_cols):
             idx = r * n_cols + c
-            dist, ind = tree.query(transformed[idx], k=30)
+            dist, ind = tree.query(transformed[idx], k=n_neighbors)
             ridx = np.array([(int(i / n_cols), int(i % n_cols)) for i in ind[0, 1:]])
             colors = img[ridx[:, 0], ridx[:, 1]]
             w = np.exp(-dist[0, 1:] / h2)
             new_img[r, c] = np.sum(w * colors) / np.sum(w)
+
+    return new_img
